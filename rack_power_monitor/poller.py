@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from rack_power_monitor.alerts import AlertNotifier
