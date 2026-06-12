@@ -72,5 +72,5 @@ async def poll_pdu_power_energy(
     return await asyncio.gather(power_task, energy_task)
 
 
-def test_pdu_connection(host: str, community: str, snmp: SnmpConfig) -> SnmpResult:
-    return asyncio.run(snmp_get(host, community, snmp.power_oid, snmp))
+async def test_pdu_connection(host: str, community: str, snmp: SnmpConfig) -> SnmpResult:
+    return await snmp_get(host, community, snmp.power_oid, snmp)

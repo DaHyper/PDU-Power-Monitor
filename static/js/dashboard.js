@@ -45,7 +45,7 @@ function renderRackCard(rack) {
       <div class="rack-header">
         <div>
           <div class="rack-name">${rack.name}</div>
-          <div class="rack-location">${rack.location || ""}</div>
+          <div class="rack-description">${rack.description || rack.location || ""}</div>
         </div>
         <span class="status-badge ${status}">${STATUS_LABELS[status] || status}</span>
       </div>

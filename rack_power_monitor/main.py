@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -120,7 +121,7 @@ async def api_save_config(body: ConfigUpdate) -> JSONResponse:
 @app.post("/api/test/pdu")
 async def api_test_pdu(body: PduTestRequest) -> JSONResponse:
     config = poller.config
-    result = test_pdu_connection(body.host, body.community, config.snmp)
+    result = await test_pdu_connection(body.host, body.community, config.snmp)
     if result.success and result.value is not None:
         power_kw = result.value / config.snmp.power_divisor
         return JSONResponse(
@@ -136,21 +137,27 @@ async def api_test_pdu(body: PduTestRequest) -> JSONResponse:
 @app.post("/api/test/pdu/all")
 async def api_test_all_pdus() -> JSONResponse:
     config = poller.config
-    results = []
+    tasks = []
+    meta = []
     for rack in config.racks:
         for pdu in rack.pdus:
-            result = test_pdu_connection(pdu.host, pdu.community, config.snmp)
-            entry = {
-                "rack": rack.name,
-                "name": pdu.name,
-                "host": pdu.host,
-                "ok": result.success,
-                "error": result.error,
-            }
-            if result.success and result.value is not None:
-                entry["raw_value"] = result.value
-                entry["power_kw"] = round(result.value / config.snmp.power_divisor, 3)
-            results.append(entry)
+            tasks.append(test_pdu_connection(pdu.host, pdu.community, config.snmp))
+            meta.append((rack.name, pdu))
+    snmp_results = await asyncio.gather(*tasks)
+
+    results = []
+    for (rack_name, pdu), result in zip(meta, snmp_results, strict=True):
+        entry = {
+            "rack": rack_name,
+            "name": pdu.name,
+            "host": pdu.host,
+            "ok": result.success,
+            "error": result.error,
+        }
+        if result.success and result.value is not None:
+            entry["raw_value"] = result.value
+            entry["power_kw"] = round(result.value / config.snmp.power_divisor, 3)
+        results.append(entry)
     return JSONResponse({"results": results})
 
 

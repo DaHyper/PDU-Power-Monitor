@@ -58,13 +58,16 @@
           </section>
 
           <section class="panel">
-            <h2>Alert thresholds</h2>
-            <p class="panel-desc">Thresholds apply per rack (combined kW draw from all PDUs in that rack).</p>
+            <h2>Racks</h2>
+            <p class="panel-desc">Name each rack, add a short description, and set alert thresholds.</p>
             <div class="threshold-grid" id="threshold-grid"></div>
+            <div class="panel-actions">
+              <button class="btn btn-secondary" id="add-rack-btn" type="button">+ Add rack</button>
+            </div>
           </section>
 
           <section class="panel">
-            <h2>Polling &amp; alerts</h2>
+            <h2>Polling &amp; SNMP</h2>
             <div class="form-row">
               <label>
                 Poll interval (seconds)

@@ -159,7 +159,7 @@ class Poller:
         self._state.racks = [
             RackReading(
                 name=rack.name,
-                location=rack.location,
+                description=rack.description,
                 power_kw=None,
                 warning_kw=rack.warning_kw,
                 critical_kw=rack.critical_kw,
@@ -285,7 +285,7 @@ class Poller:
         if not reachable:
             return RackReading(
                 name=rack.name,
-                location=rack.location,
+                description=rack.description,
                 power_kw=None,
                 warning_kw=rack.warning_kw,
                 critical_kw=rack.critical_kw,
@@ -311,7 +311,7 @@ class Poller:
 
         return RackReading(
             name=rack.name,
-            location=rack.location,
+            description=rack.description,
             power_kw=round(total_kw, 2),
             warning_kw=rack.warning_kw,
             critical_kw=rack.critical_kw,

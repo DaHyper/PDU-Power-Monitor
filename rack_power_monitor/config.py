@@ -18,7 +18,7 @@ class PduConfig:
 @dataclass
 class RackConfig:
     name: str
-    location: str
+    description: str
     warning_kw: float
     critical_kw: float
     pdus: list[PduConfig] = field(default_factory=list)
@@ -29,9 +29,9 @@ class SnmpConfig:
     version: str = "2c"
     timeout_seconds: int = 5
     retries: int = 2
-    power_oid: str = "1.3.6.1.4.1.318.1.1.26.4.3.1.5"
-    power_divisor: float = 10000.0
-    energy_oid: str = "1.3.6.1.4.1.318.1.1.26.4.3.1.9"
+    power_oid: str = "1.3.6.1.4.1.318.1.1.26.4.3.1.5.1"
+    power_divisor: float = 100.0
+    energy_oid: str = "1.3.6.1.4.1.318.1.1.26.4.3.1.9.1"
     energy_divisor: float = 10.0
 
 
@@ -74,7 +74,7 @@ def _parse_pdu(data: dict[str, Any]) -> PduConfig:
 def _parse_rack(data: dict[str, Any]) -> RackConfig:
     return RackConfig(
         name=data["name"],
-        location=data.get("location", ""),
+        description=data.get("description", data.get("location", "")),
         warning_kw=float(data.get("warning_kw", 2.5)),
         critical_kw=float(data.get("critical_kw", 3.0)),
         pdus=[_parse_pdu(p) for p in data.get("pdus", [])],
@@ -87,9 +87,9 @@ def _parse_snmp(data: dict[str, Any] | None) -> SnmpConfig:
         version=data.get("version", "2c"),
         timeout_seconds=int(data.get("timeout_seconds", 5)),
         retries=int(data.get("retries", 2)),
-        power_oid=data.get("power_oid", "1.3.6.1.4.1.318.1.1.26.4.3.1.5"),
-        power_divisor=float(data.get("power_divisor", 10000)),
-        energy_oid=data.get("energy_oid", "1.3.6.1.4.1.318.1.1.26.4.3.1.9"),
+        power_oid=data.get("power_oid", "1.3.6.1.4.1.318.1.1.26.4.3.1.5.1"),
+        power_divisor=float(data.get("power_divisor", 100)),
+        energy_oid=data.get("energy_oid", "1.3.6.1.4.1.318.1.1.26.4.3.1.9.1"),
         energy_divisor=float(data.get("energy_divisor", 10)),
     )
 
@@ -153,7 +153,7 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
         "racks": [
             {
                 "name": rack.name,
-                "location": rack.location,
+                "description": rack.description,
                 "warning_kw": rack.warning_kw,
                 "critical_kw": rack.critical_kw,
                 "pdus": [

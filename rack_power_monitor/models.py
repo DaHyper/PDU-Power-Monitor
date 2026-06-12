@@ -44,7 +44,7 @@ class PduReading:
 @dataclass
 class RackReading:
     name: str
-    location: str
+    description: str
     power_kw: float | None
     warning_kw: float
     critical_kw: float
@@ -56,7 +56,7 @@ class RackReading:
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
-            "location": self.location,
+            "description": self.description,
             "power_kw": self.power_kw,
             "warning_kw": self.warning_kw,
             "critical_kw": self.critical_kw,

@@ -196,7 +196,7 @@ body {
 }
 
 .rack-name { font-size: 1rem; font-weight: 600; }
-.rack-location { font-size: 0.8125rem; color: var(--text-muted); }
+.rack-description { font-size: 0.8125rem; color: var(--text-muted); }
 
 .status-badge {
   font-size: 0.75rem;

@@ -21,7 +21,7 @@ function buildPduRows() {
         rackIdx,
         pduIdx,
         rackName: rack.name,
-        rackLocation: rack.location,
+        rackDescription: rack.description ?? rack.location ?? "",
         warningKw: rack.warning_kw,
         criticalKw: rack.critical_kw,
         ...pdu,
@@ -77,7 +77,17 @@ function renderThresholds() {
     .map(
       (rack, i) => `
       <div class="threshold-rack" data-rack="${i}">
-        <h3>${esc(rack.name)}</h3>
+        <div class="form-row">
+          <label>
+            Rack name
+            <input type="text" class="rack-name" value="${esc(rack.name)}" placeholder="Rack A">
+          </label>
+          <label>
+            Description
+            <input type="text" class="rack-description" value="${esc(rack.description ?? rack.location ?? "")}" placeholder="Row 1 · Slots 1-2">
+            <span class="hint">Shown below the rack name on the dashboard</span>
+          </label>
+        </div>
         <div class="form-row">
           <label>
             Warning threshold (kW)
@@ -90,10 +100,6 @@ function renderThresholds() {
             <span class="hint">Sends urgent alert, highlights rack red</span>
           </label>
         </div>
-        <label>
-          Location label
-          <input type="text" class="rack-location" value="${esc(rack.location || "")}">
-        </label>
       </div>`
     )
     .join("");
@@ -140,7 +146,7 @@ function render() {
 function syncRowsToConfig() {
   const racks = (config.racks || []).map((r) => ({
     name: r.name,
-    location: r.location,
+    description: r.description ?? r.location ?? "",
     warning_kw: r.warning_kw,
     critical_kw: r.critical_kw,
     pdus: [],
@@ -194,9 +200,10 @@ function syncRowsFromTable() {
 function syncThresholdsFromForm() {
   document.querySelectorAll(".threshold-rack").forEach((el) => {
     const idx = parseInt(el.dataset.rack, 10);
+    config.racks[idx].name = el.querySelector(".rack-name").value.trim() || `Rack ${idx + 1}`;
+    config.racks[idx].description = el.querySelector(".rack-description").value;
     config.racks[idx].warning_kw = parseFloat(el.querySelector(".rack-warning").value);
     config.racks[idx].critical_kw = parseFloat(el.querySelector(".rack-critical").value);
-    config.racks[idx].location = el.querySelector(".rack-location").value;
   });
 }
 
@@ -254,12 +261,29 @@ document.getElementById("test-all-btn").addEventListener("click", async () => {
   btn.disabled = false;
 });
 
+document.getElementById("add-rack-btn").addEventListener("click", () => {
+  syncRowsFromTable();
+  syncThresholdsFromForm();
+  const letter = String.fromCharCode(65 + config.racks.length);
+  config.racks.push({
+    name: `Rack ${letter}`,
+    description: "",
+    warning_kw: 2.5,
+    critical_kw: 3.0,
+    pdus: [],
+  });
+  buildPduRows();
+  renderPduTable();
+  renderThresholds();
+});
+
 document.getElementById("add-pdu-btn").addEventListener("click", () => {
   syncRowsFromTable();
+  syncThresholdsFromForm();
   if (!config.racks.length) {
     config.racks.push({
       name: "Rack A",
-      location: "",
+      description: "",
       warning_kw: 2.5,
       critical_kw: 3.0,
       pdus: [],
