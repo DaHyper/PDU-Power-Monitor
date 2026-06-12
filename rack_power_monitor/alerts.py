@@ -4,7 +4,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from rackwatt.config import SmtpConfig
+from rack_power_monitor.config import SmtpConfig
 
 
 class EmailSender:

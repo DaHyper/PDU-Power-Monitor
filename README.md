@@ -43,10 +43,12 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 rack-power-monitor
-# or: python -m rack-power-monitor.main
+# or: python -m rack_power_monitor.main
 ```
 
 Open http://localhost:8080 for the dashboard and http://localhost:8080/config for settings.
+
+**Mac users:** see [MAC_SETUP.md](MAC_SETUP.md) for full step-by-step instructions.
 
 ### 4. Docker
 
@@ -93,7 +95,7 @@ Per rack, combined instantaneous power from all reachable PDUs:
 ## Project structure
 
 ```
-rack-power-monitor/           Python package (SNMP, polling, alerts, API)
+rack_power_monitor/   Python package (SNMP, polling, alerts, API)
 templates/          Dashboard and config HTML
 static/             CSS and JavaScript
 config.example.yaml Example configuration

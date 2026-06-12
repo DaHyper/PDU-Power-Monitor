@@ -13,7 +13,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     get_cmd,
 )
 
-from rackwatt.config import SnmpConfig
+from rack_power_monitor.config import SnmpConfig
 
 _engine = SnmpEngine()
 

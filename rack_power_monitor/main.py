@@ -12,17 +12,17 @@ from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from rackwatt import __version__
-from rackwatt.alerts import EmailSender
-from rackwatt.config import config_to_dict, load_config, merge_config_update, save_config
-from rackwatt.poller import Poller
-from rackwatt.snmp_client import test_pdu_connection
+from rack_power_monitor import __version__
+from rack_power_monitor.alerts import EmailSender
+from rack_power_monitor.config import config_to_dict, load_config, merge_config_update, save_config
+from rack_power_monitor.poller import Poller
+from rack_power_monitor.snmp_client import test_pdu_connection
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
-DEFAULT_CONFIG = os.environ.get("RACKWATT_CONFIG", str(BASE_DIR / "config.yaml"))
+DEFAULT_CONFIG = os.environ.get("RACK_POWER_MONITOR_CONFIG", str(BASE_DIR / "config.yaml"))
 
 
 def _resolve_config_path() -> str:
@@ -178,7 +178,7 @@ def main() -> None:
     import uvicorn
 
     uvicorn.run(
-        "rackwatt.main:app",
+        "rack_power_monitor.main:app",
         host=config.server.host,
         port=config.server.port,
         reload=False,

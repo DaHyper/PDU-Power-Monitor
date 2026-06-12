@@ -6,10 +6,10 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
-from rackwatt.alerts import EmailSender
-from rackwatt.config import AppConfig, PduConfig, RackConfig, load_config
-from rackwatt.models import DashboardState, PduReading, PduStatus, RackReading, RackStatus
-from rackwatt.snmp_client import poll_pdu_power_energy
+from rack_power_monitor.alerts import EmailSender
+from rack_power_monitor.config import AppConfig, PduConfig, RackConfig, load_config
+from rack_power_monitor.models import DashboardState, PduReading, PduStatus, RackReading, RackStatus
+from rack_power_monitor.snmp_client import poll_pdu_power_energy
 
 
 class AlertTracker:
