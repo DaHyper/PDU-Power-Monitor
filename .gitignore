@@ -147,6 +147,9 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# Rack Power Monitor local config (contains SNMP communities and SMTP credentials)
+config.yaml
+
 # Environments
 .env
 .envrc

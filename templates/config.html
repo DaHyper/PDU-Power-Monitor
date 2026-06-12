@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rack Power Monitor — Configuration</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <span class="logo-icon">⚡</span>
+          <div>
+            <h1>Configuration</h1>
+            <p class="subtitle">PDUs, thresholds, and alert settings</p>
+          </div>
+        </div>
+      </div>
+      <nav class="header-nav">
+        <a href="/" class="nav-link">Dashboard</a>
+        <a href="/config" class="nav-link active">Configuration</a>
+      </nav>
+      <div class="header-right">
+        <button class="btn btn-primary" id="save-btn" type="button">Save configuration</button>
+      </div>
+    </header>
+
+    <main class="main config-main">
+      <div id="save-status" class="save-status" hidden></div>
+
+      <div class="config-grid">
+        <div class="config-left">
+          <section class="panel">
+            <h2>PDU configuration — SNMP</h2>
+            <p class="panel-desc">Each PDU is polled individually. Racks sum their assigned PDUs.</p>
+            <div class="pdu-table-wrap">
+              <table class="pdu-table" id="pdu-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>PDU name</th>
+                    <th>Rack</th>
+                    <th>Hostname / IP</th>
+                    <th>Community string</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="pdu-tbody"></tbody>
+              </table>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-secondary" id="test-all-btn" type="button">Test all connections</button>
+              <button class="btn btn-secondary" id="add-pdu-btn" type="button">+ Add PDU</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Alert thresholds</h2>
+            <p class="panel-desc">Thresholds apply per rack (combined kW draw from all PDUs in that rack).</p>
+            <div class="threshold-grid" id="threshold-grid"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Polling &amp; alerts</h2>
+            <div class="form-row">
+              <label>
+                Poll interval (seconds)
+                <input type="number" id="poll-interval" min="10" max="300" step="5">
+              </label>
+              <label>
+                Alert cooldown (minutes)
+                <input type="number" id="alert-cooldown" min="1" max="120" step="1">
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                Power OID
+                <input type="text" id="power-oid">
+              </label>
+              <label>
+                Power divisor
+                <input type="number" id="power-divisor" step="any">
+              </label>
+            </div>
+            <p class="hint">Verify OIDs and scaling with <code>snmpwalk -v2c -c public &lt;ip&gt; 1.3.6.1.4.1.318.1.1.26.4.3.1.5</code></p>
+          </section>
+        </div>
+
+        <div class="config-right">
+          <section class="panel panel-tall">
+            <h2>SMTP alert settings</h2>
+            <div class="form-stack">
+              <label>
+                SMTP host
+                <input type="text" id="smtp-host" placeholder="smtp.company.com">
+              </label>
+              <div class="form-row">
+                <label>
+                  Port
+                  <input type="number" id="smtp-port" value="587">
+                </label>
+                <label>
+                  Security
+                  <select id="smtp-security">
+                    <option value="none">None</option>
+                    <option value="tls">TLS</option>
+                    <option value="ssl">SSL</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Username
+                <input type="text" id="smtp-username">
+              </label>
+              <label>
+                Password
+                <input type="password" id="smtp-password" placeholder="Leave blank to keep current">
+              </label>
+              <label>
+                From address
+                <input type="email" id="smtp-from">
+              </label>
+              <label>
+                Alert recipients
+                <div class="recipients-wrap" id="recipients-wrap"></div>
+                <div class="recipient-add">
+                  <input type="email" id="recipient-input" placeholder="email@company.com">
+                  <button class="btn btn-secondary btn-sm" id="add-recipient-btn" type="button">Add</button>
+                </div>
+              </label>
+              <button class="btn btn-secondary" id="test-smtp-btn" type="button">Send test email</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>Rack Power Monitor v{{ version }}</span>
+    </footer>
+  </div>
+
+  <script src="/static/js/config.js"></script>
+</body>
+</html>

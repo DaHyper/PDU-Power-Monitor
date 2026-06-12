@@ -1,0 +1,25 @@
+[project]
+name = "rack-power-monitor"
+version = "1.0.0"
+description = "Rack Power Monitor — per-rack APC PDU power monitoring via SNMP"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "jinja2>=3.1.4",
+    "pyyaml>=6.0.2",
+    "pysnmp>=7.0.0",
+]
+
+[project.scripts]
+rack-power-monitor = "rackwatt.main:main"
+rackwatt = "rackwatt.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["rackwatt*"]
