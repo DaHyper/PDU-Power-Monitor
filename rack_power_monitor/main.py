@@ -14,7 +14,7 @@ from starlette.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from rack_power_monitor import __version__
-from rack_power_monitor.alerts import EmailSender
+from rack_power_monitor.alerts import AlertNotifier
 from rack_power_monitor.config import config_to_dict, load_config, merge_config_update, save_config
 from rack_power_monitor.poller import Poller
 from rack_power_monitor.snmp_client import test_pdu_connection
@@ -57,6 +57,7 @@ class ConfigUpdate(BaseModel):
     snmp: dict | None = None
     racks: list[dict] | None = None
     smtp: dict | None = None
+    webhooks: list[dict] | None = None
     server: dict | None = None
 
 
@@ -163,11 +164,23 @@ async def api_test_all_pdus() -> JSONResponse:
 
 @app.post("/api/test/smtp")
 async def api_test_smtp() -> JSONResponse:
-    sender = EmailSender(poller.config.smtp)
-    if not sender.configured:
+    notifier = AlertNotifier(poller.config.smtp, poller.config.webhooks)
+    if not notifier.email.configured:
         raise HTTPException(status_code=400, detail="SMTP not configured")
     try:
-        sender.send_test()
+        notifier.send_test_email()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/test/webhooks")
+async def api_test_webhooks() -> JSONResponse:
+    notifier = AlertNotifier(poller.config.smtp, poller.config.webhooks)
+    if not notifier.webhooks.configured:
+        raise HTTPException(status_code=400, detail="No webhooks configured")
+    try:
+        notifier.send_test_webhooks()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return JSONResponse({"ok": True})

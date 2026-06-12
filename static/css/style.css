@@ -488,10 +488,44 @@ body {
   border: 1px solid var(--border);
 }
 
-.threshold-rack h3 {
-  font-size: 0.875rem;
+.webhook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.webhook-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.webhook-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 0.75rem;
 }
+
+.webhook-item-header label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.webhook-item input,
+.webhook-item select {
+  width: 100%;
+}
+
+.webhook-enabled {
+  width: auto !important;
+  accent-color: var(--green);
+}
+
 
 .form-row {
   display: grid;

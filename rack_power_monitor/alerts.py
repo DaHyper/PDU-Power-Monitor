@@ -1,10 +1,26 @@
 from __future__ import annotations
 
+import json
+import logging
 import smtplib
 import ssl
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from email.message import EmailMessage
+from typing import Any
 
-from rack_power_monitor.config import SmtpConfig
+from rack_power_monitor.config import SmtpConfig, WebhookConfig
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AlertMessage:
+    subject: str
+    body: str
+    severity: str = "info"  # info | warning | critical | recovery
 
 
 class EmailSender:
@@ -45,3 +61,92 @@ class EmailSender:
             subject="[Rack Power Monitor] Test alert",
             body="This is a test email from Rack Power Monitor. SMTP settings are working.",
         )
+
+
+def _build_webhook_payload(webhook: WebhookConfig, alert: AlertMessage) -> dict[str, Any]:
+    text = f"*{alert.subject}*\n{alert.body}" if webhook.format == "slack" else f"**{alert.subject}**\n{alert.body}"
+
+    if webhook.format == "slack":
+        return {"text": text}
+    if webhook.format == "discord":
+        return {"content": text[:2000]}
+    return {
+        "source": "rack-power-monitor",
+        "severity": alert.severity,
+        "title": alert.subject,
+        "message": alert.body,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+class WebhookSender:
+    def __init__(self, webhooks: list[WebhookConfig]) -> None:
+        self.webhooks = [w for w in webhooks if w.enabled and w.url]
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.webhooks)
+
+    def send(self, alert: AlertMessage) -> None:
+        for webhook in self.webhooks:
+            self._post(webhook, alert)
+
+    def send_test(self) -> None:
+        self.send(
+            AlertMessage(
+                subject="[Rack Power Monitor] Test alert",
+                body="This is a test webhook from Rack Power Monitor.",
+                severity="info",
+            )
+        )
+
+    def _post(self, webhook: WebhookConfig, alert: AlertMessage) -> None:
+        payload = _build_webhook_payload(webhook, alert)
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            webhook.url,
+            data=data,
+            headers={"Content-Type": "application/json", "User-Agent": "RackPowerMonitor/1.0"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                if response.status >= 400:
+                    logger.warning(
+                        "Webhook %s returned HTTP %s", webhook.name or webhook.url, response.status
+                    )
+        except urllib.error.URLError as exc:
+            logger.warning("Webhook %s failed: %s", webhook.name or webhook.url, exc)
+
+
+class AlertNotifier:
+    """Dispatches alerts to email and configured webhooks."""
+
+    def __init__(self, smtp: SmtpConfig, webhooks: list[WebhookConfig]) -> None:
+        self.email = EmailSender(smtp)
+        self.webhooks = WebhookSender(webhooks)
+
+    @property
+    def configured(self) -> bool:
+        return self.email.configured or self.webhooks.configured
+
+    def send(self, subject: str, body: str, severity: str = "info") -> None:
+        alert = AlertMessage(subject=subject, body=body, severity=severity)
+
+        if self.email.configured:
+            try:
+                self.email.send(subject, body)
+            except Exception:
+                logger.exception("Email alert failed")
+
+        if self.webhooks.configured:
+            try:
+                self.webhooks.send(alert)
+            except Exception:
+                logger.exception("Webhook alert failed")
+
+    def send_test_email(self) -> None:
+        self.email.send_test()
+
+    def send_test_webhooks(self) -> None:
+        self.webhooks.send_test()

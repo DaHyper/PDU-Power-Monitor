@@ -125,6 +125,69 @@ function renderRecipients() {
   });
 }
 
+function renderWebhooks() {
+  if (!config.webhooks) config.webhooks = [];
+  const list = document.getElementById("webhook-list");
+  if (!config.webhooks.length) {
+    list.innerHTML = '<p class="hint">No webhooks configured. Add one for Slack, Discord, or a custom endpoint.</p>';
+    return;
+  }
+  list.innerHTML = config.webhooks
+    .map(
+      (wh, i) => `
+      <div class="webhook-item" data-webhook="${i}">
+        <div class="webhook-item-header">
+          <label>
+            <input type="checkbox" class="webhook-enabled" ${wh.enabled !== false ? "checked" : ""}>
+            Enabled
+          </label>
+          <button class="btn btn-danger btn-sm remove-webhook" type="button">Remove</button>
+        </div>
+        <div class="form-stack">
+          <label>
+            Name
+            <input type="text" class="webhook-name" value="${esc(wh.name || "")}" placeholder="Ops Slack">
+          </label>
+          <label>
+            Webhook URL
+            <input type="url" class="webhook-url" value="${esc(wh.url || "")}" placeholder="https://hooks.slack.com/services/...">
+          </label>
+          <label>
+            Format
+            <select class="webhook-format">
+              <option value="generic" ${wh.format === "generic" ? "selected" : ""}>Generic JSON</option>
+              <option value="slack" ${wh.format === "slack" ? "selected" : ""}>Slack</option>
+              <option value="discord" ${wh.format === "discord" ? "selected" : ""}>Discord</option>
+            </select>
+            <span class="hint">Slack/Discord use incoming webhook URLs from those services</span>
+          </label>
+        </div>
+      </div>`
+    )
+    .join("");
+
+  list.querySelectorAll(".remove-webhook").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.closest(".webhook-item").dataset.webhook, 10);
+      config.webhooks.splice(idx, 1);
+      renderWebhooks();
+    });
+  });
+}
+
+function syncWebhooksFromForm() {
+  if (!config.webhooks) config.webhooks = [];
+  config.webhooks = [];
+  document.querySelectorAll(".webhook-item").forEach((el) => {
+    config.webhooks.push({
+      name: el.querySelector(".webhook-name").value.trim(),
+      url: el.querySelector(".webhook-url").value.trim(),
+      format: el.querySelector(".webhook-format").value,
+      enabled: el.querySelector(".webhook-enabled").checked,
+    });
+  });
+}
+
 function render() {
   document.getElementById("poll-interval").value = config.poll_interval_seconds;
   document.getElementById("alert-cooldown").value = config.alert_cooldown_minutes;
@@ -140,6 +203,7 @@ function render() {
 
   renderPduTable();
   renderThresholds();
+  renderWebhooks();
   renderRecipients();
 }
 
@@ -167,6 +231,7 @@ function syncRowsToConfig() {
 function readFormIntoConfig() {
   syncRowsFromTable();
   syncThresholdsFromForm();
+  syncWebhooksFromForm();
 
   config.poll_interval_seconds = parseInt(document.getElementById("poll-interval").value, 10);
   config.alert_cooldown_minutes = parseInt(document.getElementById("alert-cooldown").value, 10);
@@ -313,6 +378,30 @@ document.getElementById("add-recipient-btn").addEventListener("click", () => {
     renderRecipients();
   }
   input.value = "";
+});
+
+document.getElementById("add-webhook-btn").addEventListener("click", () => {
+  syncWebhooksFromForm();
+  if (!config.webhooks) config.webhooks = [];
+  config.webhooks.push({
+    name: "",
+    url: "",
+    format: "slack",
+    enabled: true,
+  });
+  renderWebhooks();
+});
+
+document.getElementById("test-webhooks-btn").addEventListener("click", async () => {
+  readFormIntoConfig();
+  await fetch("/api/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  const res = await fetch("/api/test/webhooks", { method: "POST" });
+  const data = await res.json();
+  showStatus(res.ok ? "Test webhook sent." : (data.detail || "Webhook test failed."), res.ok);
 });
 
 document.getElementById("test-smtp-btn").addEventListener("click", async () => {

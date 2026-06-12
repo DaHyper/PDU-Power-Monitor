@@ -93,6 +93,16 @@
         </div>
 
         <div class="config-right">
+          <section class="panel">
+            <h2>Webhook alerts</h2>
+            <p class="panel-desc">Send alerts to Slack, Discord, or any URL that accepts JSON POST.</p>
+            <div id="webhook-list" class="webhook-list"></div>
+            <div class="panel-actions">
+              <button class="btn btn-secondary" id="add-webhook-btn" type="button">+ Add webhook</button>
+              <button class="btn btn-secondary" id="test-webhooks-btn" type="button">Send test webhook</button>
+            </div>
+          </section>
+
           <section class="panel panel-tall">
             <h2>SMTP alert settings</h2>
             <div class="form-stack">

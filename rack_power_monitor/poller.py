@@ -8,7 +8,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
-from rack_power_monitor.alerts import EmailSender
+from rack_power_monitor.alerts import AlertNotifier
 from rack_power_monitor.config import AppConfig, PduConfig, RackConfig, load_config
 from rack_power_monitor.models import DashboardState, PduReading, PduStatus, RackReading, RackStatus
 from rack_power_monitor.snmp_client import poll_pdu_power_energy
@@ -38,7 +38,7 @@ class AlertTracker:
     def process(
         self,
         racks: list[RackReading],
-        sender: EmailSender,
+        notifier: AlertNotifier,
     ) -> None:
         for rack in racks:
             prev = self._rack_state.get(rack.name, RackStatus.UNKNOWN)
@@ -48,7 +48,8 @@ class AlertTracker:
                 key = self._key("rack", rack.name, curr.value)
                 if self._can_send(key):
                     level = "WARNING" if curr == RackStatus.WARNING else "CRITICAL"
-                    sender.send(
+                    severity = "warning" if curr == RackStatus.WARNING else "critical"
+                    notifier.send(
                         subject=f"[Rack Power Monitor] {level}: {rack.name} at {rack.power_kw:.2f} kW",
                         body=(
                             f"Rack {rack.name} has crossed the {level.lower()} threshold.\n\n"
@@ -56,18 +57,20 @@ class AlertTracker:
                             f"Warning threshold: {rack.warning_kw:.2f} kW\n"
                             f"Critical threshold: {rack.critical_kw:.2f} kW\n"
                         ),
+                        severity=severity,
                     )
                     self._mark_sent(key)
 
             if prev in (RackStatus.WARNING, RackStatus.CRITICAL) and curr == RackStatus.OK:
                 key = self._key("rack", rack.name, "recovery")
                 if self._can_send(key):
-                    sender.send(
+                    notifier.send(
                         subject=f"[Rack Power Monitor] RECOVERED: {rack.name} back to normal",
                         body=(
                             f"Rack {rack.name} is back under the warning threshold.\n\n"
                             f"Current draw: {rack.power_kw:.2f} kW\n"
                         ),
+                        severity="recovery",
                     )
                     self._mark_sent(key)
 
@@ -81,22 +84,24 @@ class AlertTracker:
                 if curr_pdu == PduStatus.UNREACHABLE and prev_pdu == PduStatus.OK:
                     key = self._key("pdu", pdu_key, "unreachable")
                     if self._can_send(key):
-                        sender.send(
+                        notifier.send(
                             subject=f"[Rack Power Monitor] PDU UNREACHABLE: {pdu.name} ({pdu.host})",
                             body=(
                                 f"PDU {pdu.name} at {pdu.host} is unreachable.\n"
                                 f"Rack: {rack.name}\n"
                                 f"Error: {pdu.error or 'timeout'}\n"
                             ),
+                            severity="critical",
                         )
                         self._mark_sent(key)
 
                 if curr_pdu == PduStatus.OK and prev_pdu == PduStatus.UNREACHABLE:
                     key = self._key("pdu", pdu_key, "recovery")
                     if self._can_send(key):
-                        sender.send(
+                        notifier.send(
                             subject=f"[Rack Power Monitor] PDU RECOVERED: {pdu.name} ({pdu.host})",
                             body=f"PDU {pdu.name} at {pdu.host} is responding again.",
+                            severity="recovery",
                         )
                         self._mark_sent(key)
 
@@ -232,8 +237,8 @@ class Poller:
             self._aggregate_rack(rack, pdu_readings) for rack, pdu_readings in rack_results
         ]
 
-        sender = EmailSender(config.smtp)
-        self._alert_tracker.process(rack_readings, sender)
+        notifier = AlertNotifier(config.smtp, config.webhooks)
+        self._alert_tracker.process(rack_readings, notifier)
 
         with self._lock:
             self._state.racks = rack_readings

@@ -49,6 +49,16 @@ smtp:
     - "ops-team@company.com"
     - "john.smith@company.com"
 
+webhooks:
+  - name: "Ops Slack"
+    url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    format: "slack"  # generic | slack | discord
+    enabled: true
+  - name: "Discord"
+    url: "https://discord.com/api/webhooks/ID/TOKEN"
+    format: "discord"
+    enabled: false
+
 server:
   host: "0.0.0.0"
   port: 8080

@@ -47,6 +47,14 @@ class SmtpConfig:
 
 
 @dataclass
+class WebhookConfig:
+    name: str = ""
+    url: str = ""
+    format: str = "generic"  # generic | slack | discord
+    enabled: bool = True
+
+
+@dataclass
 class ServerConfig:
     host: str = "0.0.0.0"
     port: int = 8080
@@ -60,6 +68,7 @@ class AppConfig:
     snmp: SnmpConfig = field(default_factory=SnmpConfig)
     racks: list[RackConfig] = field(default_factory=list)
     smtp: SmtpConfig = field(default_factory=SmtpConfig)
+    webhooks: list[WebhookConfig] = field(default_factory=list)
     server: ServerConfig = field(default_factory=ServerConfig)
 
 
@@ -110,6 +119,15 @@ def _parse_smtp(data: dict[str, Any] | None) -> SmtpConfig:
     )
 
 
+def _parse_webhook(data: dict[str, Any]) -> WebhookConfig:
+    return WebhookConfig(
+        name=data.get("name", ""),
+        url=data.get("url", ""),
+        format=data.get("format", "generic"),
+        enabled=bool(data.get("enabled", True)),
+    )
+
+
 def _parse_server(data: dict[str, Any] | None) -> ServerConfig:
     data = data or {}
     return ServerConfig(
@@ -133,6 +151,7 @@ def load_config(path: str | Path) -> AppConfig:
         snmp=_parse_snmp(raw.get("snmp")),
         racks=[_parse_rack(r) for r in raw.get("racks", [])],
         smtp=_parse_smtp(raw.get("smtp")),
+        webhooks=[_parse_webhook(w) for w in raw.get("webhooks", [])],
         server=_parse_server(raw.get("server")),
     )
 
@@ -176,6 +195,15 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
             "from_address": config.smtp.from_address,
             "recipients": list(config.smtp.recipients),
         },
+        "webhooks": [
+            {
+                "name": wh.name,
+                "url": wh.url,
+                "format": wh.format,
+                "enabled": wh.enabled,
+            }
+            for wh in config.webhooks
+        ],
         "server": {
             "host": config.server.host,
             "port": config.server.port,
@@ -211,6 +239,9 @@ def merge_config_update(current: AppConfig, update: dict[str, Any]) -> dict[str,
         if "password" in smtp_update and smtp_update["password"] in ("", "********"):
             smtp_update.pop("password", None)
         merged["smtp"].update(smtp_update)
+
+    if "webhooks" in deep:
+        merged["webhooks"] = deep["webhooks"]
 
     if "server" in deep:
         merged["server"].update(deep["server"])
