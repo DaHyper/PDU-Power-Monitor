@@ -7,15 +7,24 @@ from pathlib import Path
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 from pydantic import BaseModel
 
+import yaml
+
 from rack_power_monitor import __version__
 from rack_power_monitor.alerts import AlertNotifier
-from rack_power_monitor.config import config_to_dict, load_config, merge_config_update, save_config
+from rack_power_monitor.config import (
+    PduConfig,
+    config_to_dict,
+    config_to_yaml,
+    load_config,
+    merge_config_update,
+    save_config,
+)
 from rack_power_monitor.poller import Poller
 from rack_power_monitor.snmp_client import test_pdu_connection
 
@@ -58,12 +67,14 @@ class ConfigUpdate(BaseModel):
     racks: list[dict] | None = None
     smtp: dict | None = None
     webhooks: list[dict] | None = None
+    maintenance: dict | None = None
     server: dict | None = None
 
 
 class PduTestRequest(BaseModel):
     host: str
     community: str = "public"
+    snmp_version: str | None = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -119,10 +130,45 @@ async def api_save_config(body: ConfigUpdate) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/config/export")
+async def api_export_config() -> Response:
+    yaml_text = config_to_yaml(poller.config, mask_secrets=False)
+    return Response(
+        content=yaml_text,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": 'attachment; filename="rack-power-monitor-config.yaml"',
+        },
+    )
+
+
+@app.post("/api/config/import")
+async def api_import_config(file: UploadFile = File(...)) -> JSONResponse:
+    try:
+        raw = await file.read()
+        data = yaml.safe_load(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Config must be a YAML mapping")
+        save_config(config_path, data)
+        poller.reload_config()
+        result = config_to_dict(poller.config, mask_secrets=True)
+        if result["smtp"].get("password"):
+            result["smtp"]["password"] = "********"
+        return JSONResponse({"ok": True, "config": result})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/test/pdu")
 async def api_test_pdu(body: PduTestRequest) -> JSONResponse:
     config = poller.config
-    result = await test_pdu_connection(body.host, body.community, config.snmp)
+    pdu = PduConfig(
+        name="test",
+        host=body.host,
+        community=body.community,
+        snmp_version=body.snmp_version,
+    )
+    result = await test_pdu_connection(pdu, config.snmp)
     if result.success and result.value is not None:
         power_kw = result.value / config.snmp.power_divisor
         return JSONResponse(
@@ -142,7 +188,7 @@ async def api_test_all_pdus() -> JSONResponse:
     meta = []
     for rack in config.racks:
         for pdu in rack.pdus:
-            tasks.append(test_pdu_connection(pdu.host, pdu.community, config.snmp))
+            tasks.append(test_pdu_connection(pdu, config.snmp))
             meta.append((rack.name, pdu))
     snmp_results = await asyncio.gather(*tasks)
 

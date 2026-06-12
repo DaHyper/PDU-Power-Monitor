@@ -188,11 +188,79 @@ function syncWebhooksFromForm() {
   });
 }
 
+function toggleSnmpV3Panel() {
+  const version = document.getElementById("snmp-version").value;
+  document.getElementById("snmp-v3-panel").hidden = version !== "3";
+}
+
+function isoToLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localInputToIso(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function renderMaintenance() {
+  const m = config.maintenance || {};
+  document.getElementById("maintenance-enabled").checked = !!m.enabled;
+  document.getElementById("maintenance-silence").checked = m.silence_alerts !== false;
+  document.getElementById("maintenance-message").value = m.message || "";
+  document.getElementById("maintenance-until").value = isoToLocalInput(m.until);
+}
+
+function syncMaintenanceFromForm() {
+  if (!config.maintenance) config.maintenance = {};
+  config.maintenance.enabled = document.getElementById("maintenance-enabled").checked;
+  config.maintenance.silence_alerts = document.getElementById("maintenance-silence").checked;
+  config.maintenance.message = document.getElementById("maintenance-message").value;
+  const until = localInputToIso(document.getElementById("maintenance-until").value);
+  config.maintenance.until = until || null;
+}
+
+function renderSnmp() {
+  const snmp = config.snmp || {};
+  const v3 = snmp.v3 || {};
+  document.getElementById("snmp-version").value = snmp.version || "2c";
+  document.getElementById("energy-oid").value = snmp.energy_oid || "";
+  document.getElementById("v3-username").value = v3.username || "";
+  document.getElementById("v3-security-level").value = v3.security_level || "authPriv";
+  document.getElementById("v3-auth-password").value = "";
+  document.getElementById("v3-auth-protocol").value = v3.auth_protocol || "SHA";
+  document.getElementById("v3-priv-password").value = "";
+  document.getElementById("v3-priv-protocol").value = v3.priv_protocol || "AES";
+  toggleSnmpV3Panel();
+}
+
+function syncSnmpFromForm() {
+  config.snmp.version = document.getElementById("snmp-version").value;
+  config.snmp.energy_oid = document.getElementById("energy-oid").value;
+  if (!config.snmp.v3) config.snmp.v3 = {};
+  config.snmp.v3.username = document.getElementById("v3-username").value;
+  config.snmp.v3.security_level = document.getElementById("v3-security-level").value;
+  config.snmp.v3.auth_protocol = document.getElementById("v3-auth-protocol").value;
+  config.snmp.v3.priv_protocol = document.getElementById("v3-priv-protocol").value;
+  const authPw = document.getElementById("v3-auth-password").value;
+  const privPw = document.getElementById("v3-priv-password").value;
+  if (authPw) config.snmp.v3.auth_password = authPw;
+  if (privPw) config.snmp.v3.priv_password = privPw;
+}
+
 function render() {
   document.getElementById("poll-interval").value = config.poll_interval_seconds;
   document.getElementById("alert-cooldown").value = config.alert_cooldown_minutes;
   document.getElementById("power-oid").value = config.snmp.power_oid;
   document.getElementById("power-divisor").value = config.snmp.power_divisor;
+
+  renderSnmp();
+  renderMaintenance();
 
   document.getElementById("smtp-host").value = config.smtp.host || "";
   document.getElementById("smtp-port").value = config.smtp.port || 587;
@@ -232,6 +300,8 @@ function readFormIntoConfig() {
   syncRowsFromTable();
   syncThresholdsFromForm();
   syncWebhooksFromForm();
+  syncMaintenanceFromForm();
+  syncSnmpFromForm();
 
   config.poll_interval_seconds = parseInt(document.getElementById("poll-interval").value, 10);
   config.alert_cooldown_minutes = parseInt(document.getElementById("alert-cooldown").value, 10);
@@ -402,6 +472,30 @@ document.getElementById("test-webhooks-btn").addEventListener("click", async () 
   const res = await fetch("/api/test/webhooks", { method: "POST" });
   const data = await res.json();
   showStatus(res.ok ? "Test webhook sent." : (data.detail || "Webhook test failed."), res.ok);
+});
+
+document.getElementById("snmp-version").addEventListener("change", toggleSnmpV3Panel);
+
+document.getElementById("export-config-btn").addEventListener("click", () => {
+  window.location.href = "/api/config/export";
+});
+
+document.getElementById("import-config-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/config/import", { method: "POST", body: form });
+  const data = await res.json();
+  if (res.ok) {
+    config = data.config;
+    buildPduRows();
+    render();
+    showStatus("Configuration imported.", true);
+  } else {
+    showStatus(data.detail || "Import failed.", false);
+  }
+  e.target.value = "";
 });
 
 document.getElementById("test-smtp-btn").addEventListener("click", async () => {

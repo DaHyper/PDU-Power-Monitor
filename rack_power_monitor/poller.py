@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from rack_power_monitor.alerts import AlertNotifier
+from rack_power_monitor.maintenance import is_maintenance_active, should_silence_alerts
 from rack_power_monitor.config import AppConfig, PduConfig, RackConfig, load_config
 from rack_power_monitor.models import DashboardState, PduReading, PduStatus, RackReading, RackStatus
 from rack_power_monitor.snmp_client import poll_pdu_power_energy
@@ -125,8 +126,22 @@ class HistoryBuffer:
             }
         )
 
-    def snapshot(self) -> dict[str, list[dict[str, Any]]]:
-        return {name: list(points) for name, points in self._data.items()}
+    def snapshot(self, hours: float = 24) -> dict[str, list[dict[str, Any]]]:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        result: dict[str, list[dict[str, Any]]] = {}
+        for name, points in self._data.items():
+            filtered = []
+            for point in points:
+                try:
+                    ts = datetime.fromisoformat(point["t"].replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                except (ValueError, KeyError):
+                    continue
+                if ts >= cutoff:
+                    filtered.append(point)
+            result[name] = filtered
+        return result
 
 
 class Poller:
@@ -149,11 +164,16 @@ class Poller:
 
     def get_state(self) -> DashboardState:
         with self._lock:
+            config = self._config
+            maintenance = config.maintenance
             return DashboardState(
                 racks=list(self._state.racks),
                 last_poll=self._state.last_poll,
                 poll_interval_seconds=self._state.poll_interval_seconds,
-                history=self._history.snapshot(),
+                history=self._history.snapshot(hours=24),
+                maintenance_enabled=is_maintenance_active(maintenance),
+                maintenance_message=maintenance.message if is_maintenance_active(maintenance) else "",
+                alerts_silenced=should_silence_alerts(maintenance),
             )
 
     def reload_config(self) -> None:
@@ -237,8 +257,9 @@ class Poller:
             self._aggregate_rack(rack, pdu_readings) for rack, pdu_readings in rack_results
         ]
 
-        notifier = AlertNotifier(config.smtp, config.webhooks)
-        self._alert_tracker.process(rack_readings, notifier)
+        if not should_silence_alerts(config.maintenance):
+            notifier = AlertNotifier(config.smtp, config.webhooks)
+            self._alert_tracker.process(rack_readings, notifier)
 
         with self._lock:
             self._state.racks = rack_readings
@@ -248,9 +269,7 @@ class Poller:
 
     async def _read_pdu(self, pdu: PduConfig, config: AppConfig, now: datetime) -> PduReading:
         pdu_id = f"{pdu.host}:{pdu.name}"
-        power_result, energy_result = await poll_pdu_power_energy(
-            pdu.host, pdu.community, config.snmp
-        )
+        power_result, energy_result = await poll_pdu_power_energy(pdu, config.snmp)
 
         if not power_result.success:
             prev = self._last_pdu_readings.get(pdu_id)

@@ -10,6 +10,10 @@ Per-rack power monitoring for APC PDUs. Combines **kW draw** across multiple PDU
 - **Configuration UI** for PDUs, thresholds, poll interval, and SMTP alerts
 - **Email alerts** with cooldown (warning, critical, PDU unreachable, recovery)
 - **Webhook alerts** for Slack, Discord, or custom JSON endpoints
+- **24-hour power history** sparkline per rack on the dashboard
+- **SNMP v3** support (auth/priv protocols configurable)
+- **Maintenance mode** to silence alerts during planned work
+- **Config export/import** (download/upload YAML from the config page)
 - **Stale/unreachable PDUs** are clearly flagged — never silently shown as zero
 - Single **YAML config file** — no hardcoded IPs or credentials
 
@@ -94,6 +98,8 @@ Per rack, combined instantaneous power from all reachable PDUs:
 | POST | `/api/test/pdu/all` | Test all configured PDUs |
 | POST | `/api/test/smtp` | Send test alert email |
 | POST | `/api/test/webhooks` | Send test webhook |
+| GET | `/api/config/export` | Download config as YAML |
+| POST | `/api/config/import` | Upload and apply YAML config |
 
 ## Project structure
 

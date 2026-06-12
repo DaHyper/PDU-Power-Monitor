@@ -73,6 +73,9 @@ class DashboardState:
     last_poll: datetime | None = None
     poll_interval_seconds: int = 60
     history: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    maintenance_enabled: bool = False
+    maintenance_message: str = ""
+    alerts_silenced: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,4 +83,7 @@ class DashboardState:
             "last_poll": self.last_poll.isoformat() if self.last_poll else None,
             "poll_interval_seconds": self.poll_interval_seconds,
             "history": self.history,
+            "maintenance_enabled": self.maintenance_enabled,
+            "maintenance_message": self.maintenance_message,
+            "alerts_silenced": self.alerts_silenced,
         }

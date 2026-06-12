@@ -18,10 +18,54 @@ function formatKw(value) {
   return value.toFixed(2);
 }
 
-function renderRackCard(rack) {
+function renderSparkline(points, warningKw, criticalKw) {
+  if (!points || points.length < 2) {
+    return '<div class="sparkline-wrap"><div class="sparkline-empty">Collecting 24h history…</div></div>';
+  }
+
+  const valid = points.filter((p) => p.kw != null);
+  if (valid.length < 2) {
+    return '<div class="sparkline-wrap"><div class="sparkline-empty">Collecting 24h history…</div></div>';
+  }
+
+  const w = 300;
+  const h = 52;
+  const pad = 3;
+  const maxY = Math.max(criticalKw * 1.15, ...valid.map((p) => p.kw), 0.5);
+
+  const coords = valid
+    .map((p, i) => {
+      const x = pad + (i / (valid.length - 1)) * (w - pad * 2);
+      const y = h - pad - (p.kw / maxY) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const warnY = h - pad - (warningKw / maxY) * (h - pad * 2);
+  const critY = h - pad - (criticalKw / maxY) * (h - pad * 2);
+
+  return `
+    <div class="sparkline-wrap">
+      <div class="sparkline-header">
+        <span>Last 24 hours</span>
+        <span class="sparkline-legend">
+          <span class="legend-warn">— warn</span>
+          <span class="legend-crit">— limit</span>
+        </span>
+      </div>
+      <svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="${pad}" y1="${warnY}" x2="${w - pad}" y2="${warnY}" class="sparkline-warn-line"/>
+        <line x1="${pad}" y1="${critY}" x2="${w - pad}" y2="${critY}" class="sparkline-crit-line"/>
+        <polyline points="${coords}" class="sparkline-line"/>
+      </svg>
+    </div>`;
+}
+
+function renderRackCard(rack, history) {
   const status = rack.status || "unknown";
   const pct = rack.percent_of_limit ?? 0;
   const barWidth = Math.min(pct, 100);
+  const sparkline = renderSparkline(history, rack.warning_kw, rack.critical_kw);
 
   const pduHtml = rack.pdus
     .map((pdu) => {
@@ -60,6 +104,7 @@ function renderRackCard(rack) {
         <span>${pct}% of limit</span>
         <span class="headroom ${status}">${formatKw(rack.headroom_kw)} kW headroom</span>
       </div>
+      ${sparkline}
       <div class="pdu-list">${pduHtml}</div>
     </div>`;
 }
@@ -103,6 +148,18 @@ function renderCombinedView(racks) {
   document.getElementById("gauge-arrow").style.left = `${arrowPct}%`;
 }
 
+function updateMaintenanceBanner(data) {
+  const banner = document.getElementById("maintenance-banner");
+  if (!data.maintenance_enabled) {
+    banner.hidden = true;
+    return;
+  }
+  banner.hidden = false;
+  const silence = data.alerts_silenced ? "Alerts silenced." : "Alerts active.";
+  const msg = data.maintenance_message || "Maintenance mode is active.";
+  banner.innerHTML = `<strong>Maintenance mode</strong> — ${msg} ${silence}`;
+}
+
 function updateHeader(racks, interval) {
   const pduCount = racks.reduce((n, r) => n + r.pdus.length, 0);
   document.getElementById("header-subtitle").textContent =
@@ -126,8 +183,12 @@ function render(data) {
     grid.innerHTML = '<p class="loading">No racks configured. <a href="/config" style="color:var(--blue)">Add PDUs</a>.</p>';
     return;
   }
-  grid.innerHTML = data.racks.map(renderRackCard).join("");
+  const history = data.history || {};
+  grid.innerHTML = data.racks
+    .map((rack) => renderRackCard(rack, history[rack.name] || []))
+    .join("");
   renderCombinedView(data.racks);
+  updateMaintenanceBanner(data);
   updateHeader(data.racks, data.poll_interval_seconds);
   updateLastPoll(data.last_poll);
   schedulePoll(data.poll_interval_seconds);
@@ -139,7 +200,7 @@ function schedulePoll(intervalSeconds) {
     try {
       const data = await fetchStatus();
       render(data);
-    } catch (_) { /* silent retry next interval */ }
+    } catch (_) { /* retry next interval */ }
   }, intervalSeconds * 1000);
 }
 

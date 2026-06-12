@@ -23,6 +23,11 @@
         <a href="/config" class="nav-link active">Configuration</a>
       </nav>
       <div class="header-right">
+        <button class="btn btn-secondary" id="export-config-btn" type="button">Export config</button>
+        <label class="btn btn-secondary import-btn">
+          Import config
+          <input type="file" id="import-config-input" accept=".yaml,.yml" hidden>
+        </label>
         <button class="btn btn-primary" id="save-btn" type="button">Save configuration</button>
       </div>
     </header>
@@ -88,7 +93,94 @@
                 <input type="number" id="power-divisor" step="any">
               </label>
             </div>
-            <p class="hint">Verify OIDs and scaling with <code>snmpwalk -v2c -c public &lt;ip&gt; 1.3.6.1.4.1.318.1.1.26.4.3.1.5</code></p>
+            <div class="form-row">
+              <label>
+                SNMP version (default)
+                <select id="snmp-version">
+                  <option value="1">v1</option>
+                  <option value="2c">v2c</option>
+                  <option value="3">v3</option>
+                </select>
+              </label>
+              <label>
+                Energy OID
+                <input type="text" id="energy-oid">
+              </label>
+            </div>
+            <div id="snmp-v3-panel" class="snmp-v3-panel" hidden>
+              <h3>SNMP v3 credentials</h3>
+              <div class="form-row">
+                <label>
+                  Username
+                  <input type="text" id="v3-username">
+                </label>
+                <label>
+                  Security level
+                  <select id="v3-security-level">
+                    <option value="noAuthNoPriv">noAuthNoPriv</option>
+                    <option value="authNoPriv">authNoPriv</option>
+                    <option value="authPriv">authPriv</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  Auth password
+                  <input type="password" id="v3-auth-password" placeholder="Leave blank to keep current">
+                </label>
+                <label>
+                  Auth protocol
+                  <select id="v3-auth-protocol">
+                    <option value="MD5">MD5</option>
+                    <option value="SHA">SHA</option>
+                    <option value="SHA224">SHA224</option>
+                    <option value="SHA256">SHA256</option>
+                    <option value="SHA384">SHA384</option>
+                    <option value="SHA512">SHA512</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  Priv password
+                  <input type="password" id="v3-priv-password" placeholder="Leave blank to keep current">
+                </label>
+                <label>
+                  Priv protocol
+                  <select id="v3-priv-protocol">
+                    <option value="DES">DES</option>
+                    <option value="AES">AES</option>
+                    <option value="AES192">AES192</option>
+                    <option value="AES256">AES256</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <p class="hint">Verify OIDs with <code>snmpget -v1 -c &lt;community&gt; &lt;ip&gt; 1.3.6.1.4.1.318.1.1.26.4.3.1.5.1</code></p>
+          </section>
+
+          <section class="panel">
+            <h2>Maintenance &amp; alert silence</h2>
+            <p class="panel-desc">Suppress alert emails and webhooks during planned work. Polling continues normally.</p>
+            <div class="form-stack">
+              <label class="checkbox-row">
+                <input type="checkbox" id="maintenance-enabled">
+                Maintenance mode enabled
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" id="maintenance-silence" checked>
+                Silence alerts while maintenance is active
+              </label>
+              <label>
+                Message (shown on dashboard)
+                <input type="text" id="maintenance-message" placeholder="Planned PDU work — alerts suppressed">
+              </label>
+              <label>
+                Auto-disable after (optional)
+                <input type="datetime-local" id="maintenance-until">
+                <span class="hint">Leave blank to stay on until manually disabled</span>
+              </label>
+            </div>
           </section>
         </div>
 
