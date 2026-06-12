@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import threading
 import time
 from collections import deque
@@ -10,6 +12,8 @@ from rack_power_monitor.alerts import EmailSender
 from rack_power_monitor.config import AppConfig, PduConfig, RackConfig, load_config
 from rack_power_monitor.models import DashboardState, PduReading, PduStatus, RackReading, RackStatus
 from rack_power_monitor.snmp_client import poll_pdu_power_energy
+
+logger = logging.getLogger(__name__)
 
 
 class AlertTracker:
@@ -128,9 +132,9 @@ class Poller:
         self._state = DashboardState(poll_interval_seconds=self._config.poll_interval_seconds)
         self._history = HistoryBuffer()
         self._alert_tracker = AlertTracker(self._config.alert_cooldown_minutes)
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
         self._last_pdu_readings: dict[str, PduReading] = {}
+        self._task: asyncio.Task[None] | None = None
+        self._stop: asyncio.Event | None = None
         self._init_state_from_config()
 
     @property
@@ -140,13 +144,12 @@ class Poller:
 
     def get_state(self) -> DashboardState:
         with self._lock:
-            state = DashboardState(
+            return DashboardState(
                 racks=list(self._state.racks),
                 last_poll=self._state.last_poll,
                 poll_interval_seconds=self._state.poll_interval_seconds,
                 history=self._history.snapshot(),
             )
-            return state
 
     def reload_config(self) -> None:
         with self._lock:
@@ -179,52 +182,55 @@ class Poller:
             for rack in self._config.racks
         ]
 
-    def start(self) -> None:
-        if self._thread and self._thread.is_alive():
+    async def start(self) -> None:
+        if self._task and not self._task.done():
             return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
+        self._stop = asyncio.Event()
+        self._task = asyncio.create_task(self._run_loop(), name="rack-power-monitor-poller")
 
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5)
+    async def stop(self) -> None:
+        if self._stop:
+            self._stop.set()
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        self._stop = None
 
-    def poll_now(self) -> DashboardState:
-        self._poll_once()
+    async def poll_now(self) -> DashboardState:
+        await self._poll_once()
         return self.get_state()
 
-    def _run_loop(self) -> None:
-        while not self._stop.is_set():
-            self._poll_once()
+    async def _run_loop(self) -> None:
+        while self._stop and not self._stop.is_set():
+            await self._poll_once()
             interval = self.config.poll_interval_seconds
-            self._stop.wait(interval)
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=interval)
+                return
+            except asyncio.TimeoutError:
+                continue
 
-    def _poll_once(self) -> None:
-        import asyncio
-
+    async def _poll_once(self) -> None:
         config = self.config
         now = datetime.now(timezone.utc)
 
-        async def gather_all() -> list[tuple[RackConfig, list[PduReading]]]:
-            results: list[tuple[RackConfig, list[PduReading]]] = []
-            for rack in config.racks:
-                pdu_readings: list[PduReading] = []
-                for pdu in rack.pdus:
-                    reading = await self._read_pdu(pdu, config, now)
-                    pdu_readings.append(reading)
-                results.append((rack, pdu_readings))
-            return results
-
         try:
-            rack_results = asyncio.run(gather_all())
-        except Exception:  # noqa: BLE001
+            rack_results: list[tuple[RackConfig, list[PduReading]]] = []
+            for rack in config.racks:
+                tasks = [self._read_pdu(pdu, config, now) for pdu in rack.pdus]
+                pdu_readings = list(await asyncio.gather(*tasks))
+                rack_results.append((rack, pdu_readings))
+        except Exception:
+            logger.exception("SNMP poll failed")
             return
 
-        rack_readings: list[RackReading] = []
-        for rack, pdu_readings in rack_results:
-            rack_readings.append(self._aggregate_rack(rack, pdu_readings))
+        rack_readings = [
+            self._aggregate_rack(rack, pdu_readings) for rack, pdu_readings in rack_results
+        ]
 
         sender = EmailSender(config.smtp)
         self._alert_tracker.process(rack_readings, sender)

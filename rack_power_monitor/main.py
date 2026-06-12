@@ -41,9 +41,9 @@ poller = Poller(config_path)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    poller.start()
+    await poller.start()
     yield
-    poller.stop()
+    await poller.stop()
 
 
 app = FastAPI(title="Rack Power Monitor", version=__version__, lifespan=lifespan)
@@ -90,7 +90,7 @@ async def api_status() -> JSONResponse:
 
 @app.post("/api/refresh")
 async def api_refresh() -> JSONResponse:
-    state = poller.poll_now()
+    state = await poller.poll_now()
     return JSONResponse(state.to_dict())
 
 
@@ -181,15 +181,25 @@ def main() -> None:
         print(f"Config not found: {cfg_path}", file=sys.stderr)
         print("Copy config.example.yaml to config.yaml and edit it.", file=sys.stderr)
         sys.exit(1)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Failed to load config ({cfg_path}): {exc}", file=sys.stderr)
+        sys.exit(1)
 
     import uvicorn
 
-    uvicorn.run(
-        "rack_power_monitor.main:app",
-        host=config.server.host,
-        port=config.server.port,
-        reload=False,
-    )
+    print(f"Rack Power Monitor starting on http://{config.server.host}:{config.server.port}")
+    print(f"Config: {cfg_path}")
+
+    try:
+        uvicorn.run(
+            "rack_power_monitor.main:app",
+            host=config.server.host,
+            port=config.server.port,
+            reload=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Server failed to start: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
