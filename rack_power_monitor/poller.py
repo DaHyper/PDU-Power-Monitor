@@ -36,6 +36,15 @@ class AlertTracker:
     def _mark_sent(self, key: str) -> None:
         self._last_sent[key] = time.monotonic()
 
+    @staticmethod
+    def _rack_telemetry_incomplete(rack: RackReading) -> bool:
+        """True when any PDU is offline — cached kW must not drive threshold alerts."""
+        return any(p.status in (PduStatus.STALE, PduStatus.UNREACHABLE) for p in rack.pdus)
+
+    @staticmethod
+    def _pdu_offline(status: PduStatus) -> bool:
+        return status in (PduStatus.STALE, PduStatus.UNREACHABLE)
+
     def process(
         self,
         racks: list[RackReading],
@@ -44,45 +53,49 @@ class AlertTracker:
         for rack in racks:
             prev = self._rack_state.get(rack.name, RackStatus.UNKNOWN)
             curr = rack.status
+            incomplete = self._rack_telemetry_incomplete(rack)
 
-            if curr in (RackStatus.WARNING, RackStatus.CRITICAL) and curr != prev:
-                key = self._key("rack", rack.name, curr.value)
-                if self._can_send(key):
-                    level = "WARNING" if curr == RackStatus.WARNING else "CRITICAL"
-                    severity = "warning" if curr == RackStatus.WARNING else "critical"
-                    notifier.send(
-                        subject=f"[Rack Power Monitor] {level}: {rack.name} at {rack.power_kw:.2f} kW",
-                        body=(
-                            f"Rack {rack.name} has crossed the {level.lower()} threshold.\n\n"
-                            f"Current draw: {rack.power_kw:.2f} kW\n"
-                            f"Warning threshold: {rack.warning_kw:.2f} kW\n"
-                            f"Critical threshold: {rack.critical_kw:.2f} kW\n"
-                        ),
-                        severity=severity,
-                    )
-                    self._mark_sent(key)
+            # Incomplete polls keep last-known kW for the UI; do not treat that as a
+            # real threshold crossing (avoids false over-wattage alerts on link drops).
+            if not incomplete:
+                if curr in (RackStatus.WARNING, RackStatus.CRITICAL) and curr != prev:
+                    key = self._key("rack", rack.name, curr.value)
+                    if self._can_send(key):
+                        level = "WARNING" if curr == RackStatus.WARNING else "CRITICAL"
+                        severity = "warning" if curr == RackStatus.WARNING else "critical"
+                        notifier.send(
+                            subject=f"[Rack Power Monitor] {level}: {rack.name} at {rack.power_kw:.2f} kW",
+                            body=(
+                                f"Rack {rack.name} has crossed the {level.lower()} threshold.\n\n"
+                                f"Current draw: {rack.power_kw:.2f} kW\n"
+                                f"Warning threshold: {rack.warning_kw:.2f} kW\n"
+                                f"Critical threshold: {rack.critical_kw:.2f} kW\n"
+                            ),
+                            severity=severity,
+                        )
+                        self._mark_sent(key)
 
-            if prev in (RackStatus.WARNING, RackStatus.CRITICAL) and curr == RackStatus.OK:
-                key = self._key("rack", rack.name, "recovery")
-                if self._can_send(key):
-                    notifier.send(
-                        subject=f"[Rack Power Monitor] RECOVERED: {rack.name} back to normal",
-                        body=(
-                            f"Rack {rack.name} is back under the warning threshold.\n\n"
-                            f"Current draw: {rack.power_kw:.2f} kW\n"
-                        ),
-                        severity="recovery",
-                    )
-                    self._mark_sent(key)
+                if prev in (RackStatus.WARNING, RackStatus.CRITICAL) and curr == RackStatus.OK:
+                    key = self._key("rack", rack.name, "recovery")
+                    if self._can_send(key):
+                        notifier.send(
+                            subject=f"[Rack Power Monitor] RECOVERED: {rack.name} back to normal",
+                            body=(
+                                f"Rack {rack.name} is back under the warning threshold.\n\n"
+                                f"Current draw: {rack.power_kw:.2f} kW\n"
+                            ),
+                            severity="recovery",
+                        )
+                        self._mark_sent(key)
 
-            self._rack_state[rack.name] = curr
+                self._rack_state[rack.name] = curr
 
             for pdu in rack.pdus:
                 pdu_key = f"{rack.name}:{pdu.host}"
                 prev_pdu = self._pdu_state.get(pdu_key, PduStatus.OK)
                 curr_pdu = pdu.status
 
-                if curr_pdu == PduStatus.UNREACHABLE and prev_pdu == PduStatus.OK:
+                if self._pdu_offline(curr_pdu) and not self._pdu_offline(prev_pdu):
                     key = self._key("pdu", pdu_key, "unreachable")
                     if self._can_send(key):
                         notifier.send(
@@ -96,7 +109,7 @@ class AlertTracker:
                         )
                         self._mark_sent(key)
 
-                if curr_pdu == PduStatus.OK and prev_pdu == PduStatus.UNREACHABLE:
+                if curr_pdu == PduStatus.OK and self._pdu_offline(prev_pdu):
                     key = self._key("pdu", pdu_key, "recovery")
                     if self._can_send(key):
                         notifier.send(
@@ -324,17 +337,16 @@ class Poller:
             )
 
         total_kw = sum(p.power_kw or 0 for p in reachable)
-        has_stale = any(p.status == PduStatus.STALE for p in pdus)
 
+        # Threshold status is based on last-known kW only. Stale/unreachable PDUs are
+        # surfaced on the PDU itself and must not upgrade the rack to WARNING — that
+        # previously caused false over-wattage alerts whenever the link dropped.
         if total_kw >= rack.critical_kw:
             status = RackStatus.CRITICAL
         elif total_kw >= rack.warning_kw:
             status = RackStatus.WARNING
         else:
             status = RackStatus.OK
-
-        if has_stale and status == RackStatus.OK:
-            status = RackStatus.WARNING
 
         headroom = rack.critical_kw - total_kw
         percent = (total_kw / rack.critical_kw * 100) if rack.critical_kw else None
