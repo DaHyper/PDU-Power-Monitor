@@ -533,6 +533,16 @@ body {
   gap: 0.75rem;
 }
 
+.hold-settings {
+  margin-top: 0.875rem;
+}
+
+input:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .form-stack {
   display: flex;
   flex-direction: column;

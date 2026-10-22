@@ -253,9 +253,17 @@ function syncSnmpFromForm() {
   if (privPw) config.snmp.v3.priv_password = privPw;
 }
 
+function syncAlertHoldField() {
+  const enabled = document.getElementById("alert-hold-enabled").checked;
+  document.getElementById("alert-hold-minutes").disabled = !enabled;
+}
+
 function render() {
   document.getElementById("poll-interval").value = config.poll_interval_seconds;
   document.getElementById("alert-cooldown").value = config.alert_cooldown_minutes;
+  document.getElementById("alert-hold-enabled").checked = !!config.alert_hold_enabled;
+  document.getElementById("alert-hold-minutes").value = config.alert_hold_minutes ?? 5;
+  syncAlertHoldField();
   document.getElementById("power-oid").value = config.snmp.power_oid;
   document.getElementById("power-divisor").value = config.snmp.power_divisor;
 
@@ -305,6 +313,9 @@ function readFormIntoConfig() {
 
   config.poll_interval_seconds = parseInt(document.getElementById("poll-interval").value, 10);
   config.alert_cooldown_minutes = parseInt(document.getElementById("alert-cooldown").value, 10);
+  config.alert_hold_enabled = document.getElementById("alert-hold-enabled").checked;
+  const holdMinutes = parseInt(document.getElementById("alert-hold-minutes").value, 10);
+  config.alert_hold_minutes = Number.isFinite(holdMinutes) && holdMinutes >= 1 ? holdMinutes : 5;
   config.snmp.power_oid = document.getElementById("power-oid").value;
   config.snmp.power_divisor = parseFloat(document.getElementById("power-divisor").value);
 
@@ -475,6 +486,7 @@ document.getElementById("test-webhooks-btn").addEventListener("click", async () 
 });
 
 document.getElementById("snmp-version").addEventListener("change", toggleSnmpV3Panel);
+document.getElementById("alert-hold-enabled").addEventListener("change", syncAlertHoldField);
 
 document.getElementById("export-config-btn").addEventListener("click", () => {
   window.location.href = "/api/config/export";

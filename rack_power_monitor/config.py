@@ -85,6 +85,8 @@ class ServerConfig:
 class AppConfig:
     poll_interval_seconds: int = 60
     alert_cooldown_minutes: int = 15
+    alert_hold_enabled: bool = False
+    alert_hold_minutes: int = 5
     snmp: SnmpConfig = field(default_factory=SnmpConfig)
     racks: list[RackConfig] = field(default_factory=list)
     smtp: SmtpConfig = field(default_factory=SmtpConfig)
@@ -191,9 +193,15 @@ def load_config(path: str | Path) -> AppConfig:
     with config_path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
 
+    hold_minutes = int(raw.get("alert_hold_minutes", 5))
+    if hold_minutes < 1:
+        hold_minutes = 1
+
     return AppConfig(
         poll_interval_seconds=int(raw.get("poll_interval_seconds", 60)),
         alert_cooldown_minutes=int(raw.get("alert_cooldown_minutes", 15)),
+        alert_hold_enabled=bool(raw.get("alert_hold_enabled", False)),
+        alert_hold_minutes=hold_minutes,
         snmp=_parse_snmp(raw.get("snmp")),
         racks=[_parse_rack(r) for r in raw.get("racks", [])],
         smtp=_parse_smtp(raw.get("smtp")),
@@ -218,6 +226,8 @@ def config_to_dict(config: AppConfig, mask_secrets: bool = True) -> dict[str, An
     return {
         "poll_interval_seconds": config.poll_interval_seconds,
         "alert_cooldown_minutes": config.alert_cooldown_minutes,
+        "alert_hold_enabled": config.alert_hold_enabled,
+        "alert_hold_minutes": config.alert_hold_minutes,
         "snmp": {
             "version": config.snmp.version,
             "timeout_seconds": config.snmp.timeout_seconds,
@@ -309,7 +319,12 @@ def merge_config_update(current: AppConfig, update: dict[str, Any]) -> dict[str,
     merged = config_to_dict(current, mask_secrets=False)
     deep = copy.deepcopy(update)
 
-    for key in ("poll_interval_seconds", "alert_cooldown_minutes"):
+    for key in (
+        "poll_interval_seconds",
+        "alert_cooldown_minutes",
+        "alert_hold_enabled",
+        "alert_hold_minutes",
+    ):
         if key in deep:
             merged[key] = deep[key]
 

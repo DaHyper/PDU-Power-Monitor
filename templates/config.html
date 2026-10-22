@@ -83,6 +83,17 @@
                 <input type="number" id="alert-cooldown" min="1" max="120" step="1">
               </label>
             </div>
+            <div class="form-stack hold-settings">
+              <label class="checkbox-row">
+                <input type="checkbox" id="alert-hold-enabled">
+                Only alert if the reading holds
+              </label>
+              <label>
+                Hold time (minutes)
+                <input type="number" id="alert-hold-minutes" min="1" max="180" step="1">
+                <span class="hint">Warning, critical, and recovery alerts go out only after the rack stays in that state. A short spike will not send one. Rack colors on the dashboard update on every poll. PDU unreachable alerts go out on the first failed poll.</span>
+              </label>
+            </div>
             <div class="form-row">
               <label>
                 Power OID

@@ -63,6 +63,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 class ConfigUpdate(BaseModel):
     poll_interval_seconds: int | None = None
     alert_cooldown_minutes: int | None = None
+    alert_hold_enabled: bool | None = None
+    alert_hold_minutes: int | None = None
     snmp: dict | None = None
     racks: list[dict] | None = None
     smtp: dict | None = None

@@ -72,6 +72,8 @@ All settings live in `config.yaml`:
 |---------|---------|
 | `poll_interval_seconds` | How often to poll PDUs (30–60s typical) |
 | `alert_cooldown_minutes` | Minimum time between repeat alert emails |
+| `alert_hold_enabled` | When on, threshold alerts wait until the reading holds |
+| `alert_hold_minutes` | How long a rack must stay in a state before that alert is sent |
 | `snmp` | OIDs, timeout, power scaling divisor |
 | `racks` | Rack name, description, thresholds, PDU list |
 | `smtp` | Host, port, TLS, auth, recipients |

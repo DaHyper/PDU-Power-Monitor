@@ -2,6 +2,10 @@
 
 poll_interval_seconds: 60
 alert_cooldown_minutes: 15
+# When enabled, warning/critical/recovery alerts wait until the rack stays
+# in that state. Dashboard colors update on every poll.
+alert_hold_enabled: false
+alert_hold_minutes: 5
 
 snmp:
   version: "2c"  # 1 | 2c | 3

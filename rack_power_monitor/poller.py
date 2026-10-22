@@ -18,13 +18,28 @@ logger = logging.getLogger(__name__)
 
 
 class AlertTracker:
-    """Tracks alert state and enforces cooldown between repeat notifications."""
+    """Tracks alert state, optional sustain time, and cooldown between repeats."""
 
-    def __init__(self, cooldown_minutes: int) -> None:
-        self.cooldown_seconds = cooldown_minutes * 60
+    def __init__(
+        self,
+        cooldown_minutes: int,
+        hold_enabled: bool = False,
+        hold_minutes: int = 5,
+    ) -> None:
+        self.cooldown_seconds = 0
+        self.hold_enabled = False
+        self.hold_seconds = 0
         self._rack_state: dict[str, RackStatus] = {}
         self._pdu_state: dict[str, PduStatus] = {}
         self._last_sent: dict[str, float] = {}
+        # rack -> (pending status, seconds already sustained, last observation time)
+        self._hold_candidate: dict[str, tuple[RackStatus, float, float]] = {}
+        self.apply_timing(cooldown_minutes, hold_enabled, hold_minutes)
+
+    def apply_timing(self, cooldown_minutes: int, hold_enabled: bool, hold_minutes: int) -> None:
+        self.cooldown_seconds = cooldown_minutes * 60
+        self.hold_enabled = hold_enabled
+        self.hold_seconds = max(1, hold_minutes) * 60
 
     def _key(self, prefix: str, name: str, status: str) -> str:
         return f"{prefix}:{name}:{status}"
@@ -45,6 +60,51 @@ class AlertTracker:
     def _pdu_offline(status: PduStatus) -> bool:
         return status in (PduStatus.STALE, PduStatus.UNREACHABLE)
 
+    def _hold_note(self) -> str:
+        if not self.hold_enabled or self.hold_seconds <= 0:
+            return ""
+        minutes = max(1, int(round(self.hold_seconds / 60)))
+        unit = "minute" if minutes == 1 else "minutes"
+        return f"This reading held for at least {minutes} {unit} before the alert was sent.\n"
+
+    def _freeze_hold(self, rack_name: str) -> None:
+        """Drop time spent without a fresh reading so a link gap cannot satisfy the hold."""
+        candidate = self._hold_candidate.get(rack_name)
+        if candidate is None:
+            return
+        status, accumulated, _last_seen = candidate
+        self._hold_candidate[rack_name] = (status, accumulated, time.monotonic())
+
+    def _status_after_hold(self, rack_name: str, observed: RackStatus) -> RackStatus:
+        """Return the status alerts should treat as current.
+
+        With hold disabled, that is the reading itself. With hold enabled, a new
+        status is used only after it has been seen continuously for the hold time.
+        """
+        if not self.hold_enabled or self.hold_seconds <= 0:
+            self._hold_candidate.pop(rack_name, None)
+            return observed
+
+        confirmed = self._rack_state.get(rack_name, RackStatus.UNKNOWN)
+        if observed == confirmed:
+            self._hold_candidate.pop(rack_name, None)
+            return observed
+
+        now = time.monotonic()
+        candidate = self._hold_candidate.get(rack_name)
+        if candidate is None or candidate[0] != observed:
+            self._hold_candidate[rack_name] = (observed, 0.0, now)
+            return confirmed
+
+        status, accumulated, last_seen = candidate
+        accumulated += max(0.0, now - last_seen)
+        if accumulated >= self.hold_seconds:
+            self._hold_candidate.pop(rack_name, None)
+            return observed
+
+        self._hold_candidate[rack_name] = (status, accumulated, now)
+        return confirmed
+
     def process(
         self,
         racks: list[RackReading],
@@ -52,12 +112,15 @@ class AlertTracker:
     ) -> None:
         for rack in racks:
             prev = self._rack_state.get(rack.name, RackStatus.UNKNOWN)
-            curr = rack.status
             incomplete = self._rack_telemetry_incomplete(rack)
 
             # Incomplete polls keep last-known kW for the UI; do not treat that as a
             # real threshold crossing (avoids false over-wattage alerts on link drops).
-            if not incomplete:
+            if incomplete:
+                self._freeze_hold(rack.name)
+            else:
+                curr = self._status_after_hold(rack.name, rack.status)
+                hold_note = self._hold_note()
                 if curr in (RackStatus.WARNING, RackStatus.CRITICAL) and curr != prev:
                     key = self._key("rack", rack.name, curr.value)
                     if self._can_send(key):
@@ -70,6 +133,7 @@ class AlertTracker:
                                 f"Current draw: {rack.power_kw:.2f} kW\n"
                                 f"Warning threshold: {rack.warning_kw:.2f} kW\n"
                                 f"Critical threshold: {rack.critical_kw:.2f} kW\n"
+                                f"{hold_note}"
                             ),
                             severity=severity,
                         )
@@ -83,6 +147,7 @@ class AlertTracker:
                             body=(
                                 f"Rack {rack.name} is back under the warning threshold.\n\n"
                                 f"Current draw: {rack.power_kw:.2f} kW\n"
+                                f"{hold_note}"
                             ),
                             severity="recovery",
                         )
@@ -164,7 +229,11 @@ class Poller:
         self._lock = threading.Lock()
         self._state = DashboardState(poll_interval_seconds=self._config.poll_interval_seconds)
         self._history = HistoryBuffer()
-        self._alert_tracker = AlertTracker(self._config.alert_cooldown_minutes)
+        self._alert_tracker = AlertTracker(
+            self._config.alert_cooldown_minutes,
+            self._config.alert_hold_enabled,
+            self._config.alert_hold_minutes,
+        )
         self._last_pdu_readings: dict[str, PduReading] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop: asyncio.Event | None = None
@@ -193,7 +262,11 @@ class Poller:
         with self._lock:
             self._config = load_config(self.config_path)
             self._state.poll_interval_seconds = self._config.poll_interval_seconds
-            self._alert_tracker.cooldown_seconds = self._config.alert_cooldown_minutes * 60
+            self._alert_tracker.apply_timing(
+                self._config.alert_cooldown_minutes,
+                self._config.alert_hold_enabled,
+                self._config.alert_hold_minutes,
+            )
             self._init_state_from_config()
 
     def _init_state_from_config(self) -> None:
